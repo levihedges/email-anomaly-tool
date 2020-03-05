@@ -1,5 +1,8 @@
+from DataAnalysis import DataAnalysis
 from DataLoader import DataLoader
 import argparse
+import datetime
+import pandas as pd
 
 def main():
     index = "email"
@@ -20,7 +23,32 @@ def main():
     dl = DataLoader(index, size, node)
     elastic_response = dl.fetch_data()
     df = dl.create_dataframe(elastic_response)
-    print(df)
+    
+    processed_df = df.drop(['@timestamp', 'ID', 'host', 'Content', '@version', 'path', 'message'], axis=1)
+    processed_df[['Day', 'Time']] = df.Date.str.split(" ",expand=True,)
+    processed_df = processed_df.drop(['Date'], axis=1)
+    processed_df = day_update(processed_df)
+    processed_df[['Hour', 'Minute', 'Second']] = processed_df.Time.str.split(":",expand=True,)
+    processed_df = processed_df.drop(['Minute', 'Second', 'Time'], axis=1)
+    processed_df = pd.get_dummies(processed_df, columns=['Bcc', 'Cc', 'PC', 'To', 'Attachments', 'From', 'User', 'Activity', 'Day', 'Hour'], prefix=['Bcc', 'Cc', 'PC', 'To', 'Attachments', 'From', 'User', 'Activity', 'Day', 'Hour'])
+    processed_df = processed_df.apply(pd.to_numeric)
+
+    print(processed_df.dtypes)
+    print(processed_df)
+
+    da = DataAnalysis(processed_df)
+    values = da.analyse()
+    print(values)
+
+
+def day_update(dataframe):
+    for index, row in dataframe.iterrows():
+        date = dataframe.at[index, 'Day']
+        date = datetime.datetime.strptime(date, "%m/%d/%Y").strftime('%A')
+        dataframe.at[index, 'Day'] = date
+
+    return dataframe
+
 
 def create_title():
     print("PLACEHOLDER FOR EMAIL ANALYSIS TOOL TITLE \n")
