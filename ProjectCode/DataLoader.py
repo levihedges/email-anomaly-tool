@@ -1,6 +1,7 @@
 import elasticsearch
 from elasticsearch import Elasticsearch
-import pandas as pd 
+from elasticsearch import helpers
+import pandas as pd
 import numpy as np
 
 class DataLoader:
@@ -43,4 +44,17 @@ class DataLoader:
 
         es_dataframe = pd.DataFrame(es_fields)
         return es_dataframe
-    
+
+    def send_to_elastic(flagged_events, date):
+         elastic_node = Elasticsearch(self.node)
+         helpers.bulk(elastic_node, store_events(flagged_events, date))
+
+    def store_events(flagged_events, date):
+        fe_list = flagged_events.iterrows()
+        for index, document in fe_list:
+            yield {
+                    "_index": 'flagged_events_' + date
+                    "_type": 'doc'
+                    "_id": f"{document['id'] + index}"
+                    "_source": filterKeys(document)
+            }
