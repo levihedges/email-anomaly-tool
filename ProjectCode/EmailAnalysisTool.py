@@ -9,6 +9,7 @@ def main():
     index = "email"
     size = 10
     node = "http://localhost:9200"
+    repeat = 10
 
     create_title()
     args = get_arguments()
@@ -20,6 +21,8 @@ def main():
         size = args.size
     if args.node is not None:
         node = args.node
+    if args.repeat is not None:
+        repeat = args.repeat
 
     dl = DataLoader(index, size, node)
     elastic_response = dl.fetch_data()
@@ -41,23 +44,21 @@ def main():
         row_signature = hashlib.md5(row.to_string().encode()).hexdigest()
         df.at[index, 'Signature'] = row_signature
 
-    values_list = []
-    da = DataAnalysis(processed_df)
-    values = da.analyse()
-    for index, row in values.iterrows():
-        row_signature = hashlib.md5(row.to_string().encode()).hexdigest()
-        for index, row in df.iterrows():
-            if row_signature == row['Signature']:
-                values_list.append(row)
+    d_analysis = DataAnalysis(processed_df, repeat)
+    results_dict = d_analysis.analyse()
+    results_df = pd.DataFrame()
+    df['Confidence Score'] = 0
 
-    values_df = pd.DataFrame(values_list)
-    print(values_df)
-    print(values_df['User'])
+    for index, row in df.iterrows():
+        for key, value in results_dict.items():
+            if row['Signature'] == key:
+                row['Confidence Score'] = value
+                results_df = results_df.append(row, ignore_index = True)
 
-    curr_date = str(datetime.datetime.now())
-    curr_date = curr_date.replace(" ", "")
+    curr_date = str(datetime.datetime.now()).replace(" ", "")
 
-    dl.send_to_elastic(values_df, curr_date)
+    dl.store_events(results_df, curr_date)
+    print("Flagged events sent to Elastic instance.")
 
 def day_update(dataframe):
     for index, row in dataframe.iterrows():
@@ -80,6 +81,7 @@ def get_arguments():
     parser.add_argument("-i", "--index", help="Sets the Elasticsearch index that will be queried for data. Default value of 'email' will be used if no index is specified.")
     parser.add_argument("-s", "--size", type=int, help="Sets the number of Elasticsearch documents that will be requested through the API. This needs to be an integer value. Also be aware of the limitations of the system you are running the program on. Any documents that it receives back from your Elasticsearch instance will be added to an in-memory object, so if this value is set too high you will suffer a memory leak. Default value of 10 will be used if no size is specified.")
     parser.add_argument("-n", "--node", help="Sets the URI of the Elasticsearch instance that the request for documents will be sent to. Should contain the domain/IP address and port of the instance, e.g. 'http://localhost:9200' or 'http://127.0.0.1:9200'. Default value of 'http://localhost:9200' will be used if no node is specified.")
+    parser.add_argument("-r", "--repeat", type=int, help="Sets the number of times the anomaly detection function is repeated. A higher number will result in higher accuracy, but the process will take longer to run.")
 
     return parser.parse_args()
 
